@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: file:/app/data/checkin.db
+      NODE_ENV: production
+    volumes:
+      - ./data:/app/data
+    command: sh -c "npm run db:push && npm run db:seed && npm start"
+    restart: unless-stopped

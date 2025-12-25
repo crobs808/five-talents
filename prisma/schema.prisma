@@ -1,0 +1,237 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  staffPin  String   // bcrypt hashed
+  checkInGraceMinutes Int @default(30) // Minutes before event start to allow check-in
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  families        Family[]
+  people          Person[]
+  events          Event[]
+  attendances     Attendance[]
+  pickupCodes     PickupCode[]
+  auditLogs       AuditLog[]
+  calendarUrls    CalendarUrl[]
+  registrations   Registration[]
+  payments        PaymentTransaction[]
+
+  @@index([name])
+}
+
+model Family {
+  id                String   @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  primaryPhoneE164  String   // full E.164 format
+  phoneLast4        String   // indexed for kiosk lookup
+  familyName        String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  people  Person[]
+
+  @@unique([organizationId, primaryPhoneE164])
+  @@index([organizationId])
+  @@index([organizationId, phoneLast4])
+}
+
+model Person {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  familyId       String?
+  family         Family?  @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  
+  firstName      String
+  lastName       String
+  role           String   // ADULT | YOUTH
+  levelGroup     String?  // Youth level: Navigator, Adventurer, etc.
+  position       String?  // Adult position: Leader, Coordinator, etc.
+  dateOfBirth    DateTime?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  attendances    Attendance[]
+  pickupCodes    PickupCode[] @relation("youthPickupCodes")
+  redeemedCodes  PickupCode[] @relation("redeemedByAdult")
+
+  @@index([organizationId])
+  @@index([organizationId, familyId])
+  @@index([organizationId, role])
+}
+
+model Event {
+  id            String   @id @default(cuid())
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String?
+  startsAt      DateTime
+  endsAt        DateTime?
+  location      String?
+  status        String   // DRAFT | ACTIVE | CLOSED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  attendances   Attendance[]
+  pickupCodes   PickupCode[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model Attendance {
+  id            String   @id @default(cuid())
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  personId      String
+  person        Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  
+  status        String   // CHECKED_IN | CHECKED_OUT
+  checkInAt     DateTime?
+  checkOutAt    DateTime?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([eventId, personId])
+  @@index([organizationId])
+  @@index([eventId])
+  @@index([personId])
+}
+
+model PickupCode {
+  id            String   @id @default(cuid())
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  youthPersonId String
+  youthPerson   Person   @relation("youthPickupCodes", fields: [youthPersonId], references: [id], onDelete: Cascade)
+  
+  code          String   // short human-friendly code, 6-8 chars
+  createdAt     DateTime @default(now())
+  redeemedAt    DateTime?
+  
+  redeemedByAdultId String?
+  redeemedByAdult   Person?  @relation("redeemedByAdult", fields: [redeemedByAdultId], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, youthPersonId])
+  @@unique([eventId, code])
+  @@index([organizationId])
+  @@index([eventId])
+  @@index([code])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  action        String   // CHECKIN | CHECKOUT | CODE_REDEEMED | FAMILY_CREATED | etc.
+  details       String?  // JSON string with additional data
+  createdAt     DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([createdAt])
+}
+
+model CalendarUrl {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  name           String   // User-friendly name (e.g., "Main Calendar", "Youth Events")
+  url            String   // The webcal/ical URL
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+model Registration {
+  id                     String   @id @default(cuid())
+  organizationId         String
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Registrant info
+  firstName              String
+  lastName               String
+  email                  String
+  phoneNumber            String?
+  
+  // Registration details
+  eventId                String?  // Link to event if applicable
+  registrationType       String   // e.g., "YOUTH", "ADULT", "FAMILY"
+  
+  // Payment info
+  stripeCustomerId       String?
+  stripePaymentIntentId  String?
+  paymentStatus          String   @default("pending") // "pending" | "completed" | "failed" | "refunded"
+  amount                 Int      // Amount in cents
+  amountPaid             Int      @default(0)
+  
+  // Status
+  status                 String   @default("pending") // "pending" | "registered" | "cancelled"
+  notes                  String?
+  
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  
+  payments               PaymentTransaction[]
+  
+  @@index([organizationId])
+  @@index([email])
+  @@index([stripeCustomerId])
+  @@index([paymentStatus])
+}
+
+model PaymentTransaction {
+  id                     String   @id @default(cuid())
+  organizationId         String
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  registrationId         String?
+  registration           Registration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  
+  stripeEventId          String?  // Stripe event ID for idempotency
+  stripePaymentIntentId  String
+  
+  amount                 Int      // Amount in cents
+  currency               String   @default("usd")
+  status                 String   // "pending" | "succeeded" | "failed" | "refunded"
+  
+  description            String?
+  metadata               String?  // JSON string
+  
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  
+  @@index([organizationId])
+  @@index([stripePaymentIntentId])
+  @@index([registrationId])
+}
