@@ -1,0 +1,17 @@
+.next
+node_modules
+*.db
+*.db-shm
+*.db-wal
+.env.local
+.env.*.local
+dist
+build
+coverage
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode
+.idea
+data/

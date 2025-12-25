@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100;
+}
+
+/* Print styles for tags */
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  .tag-page {
+    page-break-after: always;
+  }
+
+  .tag-container {
+    break-inside: avoid;
+  }
+
+  /* 2.25in x 4in label */
+  @page {
+    size: 2.25in 4in;
+    margin: 0;
+  }
+}
+
+/* Kiosk-friendly large buttons */
+.btn-kiosk {
+  @apply text-xl font-semibold py-4 px-6 rounded-lg transition-colors;
+  min-height: 60px;
+}
+
+.btn-kiosk-primary {
+  @apply btn-kiosk bg-blue-600 text-white hover:bg-blue-700;
+}
+
+.btn-kiosk-danger {
+  @apply btn-kiosk bg-red-600 text-white hover:bg-red-700;
+}
+
+.btn-kiosk-success {
+  @apply btn-kiosk bg-green-600 text-white hover:bg-green-700;
+}
+
+.btn-kiosk-secondary {
+  @apply btn-kiosk bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600;
+}
+
+/* Numeric keypad for kiosk */
+.keypad {
+  @apply grid grid-cols-3 gap-2;
+}
+
+.keypad-btn {
+  @apply aspect-square flex items-center justify-center text-2xl font-bold rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer;
+  min-height: 64px;
+}
+
+.keypad-btn:active {
+  @apply bg-gray-200 dark:bg-gray-600 border-gray-400 dark:border-gray-500;
+}
