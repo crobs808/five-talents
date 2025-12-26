@@ -12,7 +12,7 @@ const DEFAULT_CALENDAR_URL = 'https://www.traillifeconnect.com/icalendar/tkmr6kn
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { familyId, eventIds } = body;
+    const { familyId, eventIds, personIds } = body;
 
     if (!familyId || !Array.isArray(eventIds)) {
       return createApiError('familyId and eventIds array are required');
@@ -34,16 +34,28 @@ export async function POST(request: NextRequest) {
 
     const organizationId = family.organizationId;
 
-    // Get all active people in the family
-    const people = await prisma.person.findMany({
-      where: {
-        familyId,
-        active: true,
-      },
-    });
+    // Get people to mark attendance for
+    // If personIds provided, use those; otherwise get all active people in the family
+    let people: any[];
+    if (personIds && Array.isArray(personIds) && personIds.length > 0) {
+      people = await prisma.person.findMany({
+        where: {
+          id: { in: personIds },
+          familyId,
+          active: true,
+        },
+      });
+    } else {
+      people = await prisma.person.findMany({
+        where: {
+          familyId,
+          active: true,
+        },
+      });
+    }
 
     if (people.length === 0) {
-      return createApiError('No active people found in family', 404);
+      return createApiError('No active people found for attendance marking', 404);
     }
 
     // Fetch calendar URLs
@@ -82,56 +94,68 @@ export async function POST(request: NextRequest) {
     const failedEventIds: string[] = [];
 
     for (const eventId of eventIds) {
-      const calendarEvent = eventMap.get(eventId);
-
-      if (!calendarEvent) {
-        failedEventIds.push(eventId);
-        continue;
-      }
-
-      // Check if event exists in database, create if not
-      const startDate = new Date(calendarEvent.start);
-      const endDate = calendarEvent.end ? new Date(calendarEvent.end) : startDate;
-
+      // First check if event already exists in database
       let dbEvent = await prisma.event.findUnique({
         where: { id: eventId },
       });
 
+      // If not in database, try to find it in the calendar (iCal UID)
       if (!dbEvent) {
-        // Create event if it doesn't exist
-        dbEvent = await prisma.event.create({
-          data: {
-            id: eventId,
-            organizationId,
-            title: calendarEvent.summary || 'Untitled Event',
-            description: calendarEvent.description || '',
-            location: calendarEvent.location || '',
-            startsAt: startDate,
-            endsAt: endDate,
-            status: 'ACTIVE',
-          },
-        });
+        const calendarEvent = eventMap.get(eventId);
+
+        if (!calendarEvent) {
+          console.log(`Event ${eventId} not found in database or calendar`);
+          failedEventIds.push(eventId);
+          continue;
+        }
+
+        // Create event from calendar data
+        const startDate = new Date(calendarEvent.start);
+        const endDate = calendarEvent.end ? new Date(calendarEvent.end) : startDate;
+
+        try {
+          dbEvent = await prisma.event.create({
+            data: {
+              id: eventId,
+              organizationId,
+              title: calendarEvent.summary || 'Untitled Event',
+              description: calendarEvent.description || '',
+              location: calendarEvent.location || '',
+              startsAt: startDate,
+              endsAt: endDate,
+              status: 'ACTIVE',
+            },
+          });
+        } catch (error) {
+          console.error(`Error creating event ${eventId}:`, error);
+          failedEventIds.push(eventId);
+          continue;
+        }
       }
 
       // Mark attendance for each person
       for (const person of people) {
-        await prisma.attendance.upsert({
-          where: {
-            eventId_personId: { eventId: dbEvent.id, personId: person.id },
-          },
-          create: {
-            organizationId,
-            eventId: dbEvent.id,
-            personId: person.id,
-            status: 'CHECKED_IN',
-            checkInAt: new Date(),
-          },
-          update: {
-            status: 'CHECKED_IN',
-            checkInAt: new Date(),
-          },
-        });
-        markedCount++;
+        try {
+          await prisma.attendance.upsert({
+            where: {
+              eventId_personId: { eventId: dbEvent.id, personId: person.id },
+            },
+            create: {
+              organizationId,
+              eventId: dbEvent.id,
+              personId: person.id,
+              status: 'CHECKED_IN',
+              checkInAt: new Date(),
+            },
+            update: {
+              status: 'CHECKED_IN',
+              checkInAt: new Date(),
+            },
+          });
+          markedCount++;
+        } catch (error) {
+          console.error(`Error marking attendance for person ${person.id} on event ${eventId}:`, error);
+        }
       }
     }
 

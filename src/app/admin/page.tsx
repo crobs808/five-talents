@@ -16,11 +16,6 @@ export default function AdminPage() {
               href="/admin/families"
             />
             <AdminCard
-              title="People"
-              description="Manage adults and youth"
-              href="/admin/people"
-            />
-            <AdminCard
               title="Events"
               description="Create and manage events"
               href="/admin/events"

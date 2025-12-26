@@ -23,9 +23,23 @@ export async function GET(request: NextRequest) {
     const events = await prisma.event.findMany({
       where,
       orderBy: { startsAt: 'desc' },
+      include: {
+        _count: {
+          select: { attendances: true },
+        },
+      },
     });
 
-    return createApiResponse(events);
+    // Map to include attendance count
+    const eventsWithCounts = events.map((event: any) => ({
+      ...event,
+      attendanceCount: event._count?.attendances || 0,
+    }));
+
+    return createApiResponse({
+      events: eventsWithCounts,
+      count: eventsWithCounts.length,
+    });
   } catch (error) {
     console.error('GET /api/events error:', error);
     return createApiError('Internal server error', 500);

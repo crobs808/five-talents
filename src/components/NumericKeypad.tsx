@@ -42,10 +42,10 @@ export function NumericKeypad({
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-3">
       {/* Display */}
-      <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
-        <div className="text-5xl font-bold tracking-widest text-gray-900 dark:text-gray-100 font-mono">
+      <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg p-3 text-center">
+        <div className="text-4xl font-bold tracking-widest text-gray-900 dark:text-gray-100 font-mono">
           {value.padEnd(maxLength, '_')}
         </div>
       </div>
@@ -65,11 +65,11 @@ export function NumericKeypad({
       </div>
 
       {/* Control buttons */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-1.5">
         <button
           onClick={handleDelete}
           disabled={disabled || value.length === 0}
-          className="btn-kiosk-secondary col-span-1"
+          className="btn-kiosk-secondary col-span-1 text-sm py-2"
         >
           ← Delete
         </button>
@@ -83,7 +83,7 @@ export function NumericKeypad({
         <button
           onClick={handleClear}
           disabled={disabled || value.length === 0}
-          className="btn-kiosk-danger col-span-1"
+          className="btn-kiosk-danger col-span-1 text-sm py-2"
         >
           Clear
         </button>
@@ -93,7 +93,7 @@ export function NumericKeypad({
       <button
         onClick={handleSubmit}
         disabled={disabled || value.length !== maxLength}
-        className="btn-kiosk-success w-full text-2xl"
+        className="btn-kiosk-success w-full text-lg py-3"
       >
         Enter
       </button>

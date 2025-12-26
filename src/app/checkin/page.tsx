@@ -113,17 +113,17 @@ export default function CheckInPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-50 dark:from-gray-900 dark:to-gray-950 p-4 sm:p-8">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-50 dark:from-gray-900 dark:to-gray-950 p-3 sm:p-4 flex flex-col">
+      <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col">
         {screen === 'keypad' && (
-          <div>
-            <h1 className="text-4xl font-bold text-center mb-2 text-gray-900 dark:text-gray-100">
+          <div className="flex flex-col h-full">
+            <h1 className="text-3xl font-bold text-center mb-1 text-gray-900 dark:text-gray-100">
               Event Check In
             </h1>
             
             {/* Next Event Display */}
             {nextEvent && (
-              <div className={`mb-8 p-6 border-2 rounded-lg ${
+              <div className={`mb-3 p-4 border-2 rounded-lg flex-shrink-0 ${
                 eventStatus === 'active'
                   ? 'bg-green-100 dark:bg-green-900/30 border-green-400 dark:border-green-600'
                   : eventStatus === 'starting-soon'
@@ -131,7 +131,7 @@ export default function CheckInPage() {
                   : 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700'
               }`}>
                 <div className="text-center">
-                  <div className={`text-sm font-semibold uppercase tracking-wide mb-1 ${
+                  <div className={`text-xs font-semibold uppercase tracking-wide mb-0.5 ${
                     eventStatus === 'active'
                       ? 'text-green-700 dark:text-green-300'
                       : eventStatus === 'starting-soon'
@@ -140,18 +140,17 @@ export default function CheckInPage() {
                   }`}>
                     {eventStatus === 'active' ? '🟢 Happening Now' : eventStatus === 'starting-soon' ? '🕐 Starting Soon' : '🗓️ Coming Up'}
                   </div>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">
                     {nextEvent.title}
                   </div>
-                  <div className="text-lg text-gray-700 dark:text-gray-300">
+                  <div className="text-sm text-gray-700 dark:text-gray-300">
                     {new Date(nextEvent.start).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
+                      weekday: 'short',
+                      month: 'short',
                       day: 'numeric',
                     })}
                   </div>
-                  <div className="text-md text-gray-600 dark:text-gray-400">
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
                     {new Date(nextEvent.start).toLocaleTimeString('en-US', {
                       hour: 'numeric',
                       minute: '2-digit',
@@ -162,19 +161,21 @@ export default function CheckInPage() {
               </div>
             )}
             
-            <p className="text-center text-gray-600 dark:text-gray-400 mb-12 text-lg">
+            <p className="text-center text-gray-600 dark:text-gray-400 mb-2 text-sm flex-shrink-0">
                 Enter the last 4 digits of your phone number
               </p>
-              <NumericKeypad
-                value={phoneLast4}
-                maxLength={4}
-                onSubmit={handleKeypadSubmit}
-                onClear={() => setPhoneLast4('')}
-                onChange={setPhoneLast4}
-                disabled={loading}
-              />
+              <div className="flex-1 flex flex-col justify-center">
+                <NumericKeypad
+                  value={phoneLast4}
+                  maxLength={4}
+                  onSubmit={handleKeypadSubmit}
+                  onClear={() => setPhoneLast4('')}
+                  onChange={setPhoneLast4}
+                  disabled={loading}
+                />
+              </div>
               {error && (
-                <div className="mt-6 p-4 bg-red-100 text-red-700 rounded-lg text-center font-medium">
+                <div className="mt-2 p-3 bg-red-100 text-red-700 rounded-lg text-center text-sm font-medium">
                   {error}
                 </div>
               )}
@@ -248,6 +249,7 @@ function HouseholdRoster({
   const adults = household.people.filter((p) => p.role === 'ADULT');
   const [checkedInPeople, setCheckedInPeople] = useState<Set<string>>(new Set());
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showBackConfirmation, setShowBackConfirmation] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [alreadyCheckedIn, setAlreadyCheckedIn] = useState<Record<string, boolean>>({});
   const organizationId = 'default-org';
@@ -297,10 +299,29 @@ function HouseholdRoster({
   // Check if at least one person is newly checked in
   const hasNewCheckins = checkedInPeople.size > 0;
 
-  const handleDone = () => {
+  const handleDone = async () => {
     if (hasNewCheckins) {
-      setShowSuccess(true);
-      setCountdown(4);
+      // Batch save all selected check-ins to database
+      try {
+        for (const personId of checkedInPeople) {
+          await fetch('/api/checkin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              organizationId,
+              eventId: activeEventId,
+              eventTitle: nextEvent?.title || 'Check-In Event',
+              eventLocation: nextEvent?.location || undefined,
+              personId,
+            }),
+          });
+        }
+        setShowSuccess(true);
+        setCountdown(4);
+      } catch (err) {
+        console.error('Error saving check-ins:', err);
+        alert('Error saving check-ins. Please try again.');
+      }
     }
   };
 
@@ -412,12 +433,49 @@ function HouseholdRoster({
         </button>
         
         <button
-          onClick={onBack}
+          onClick={() => {
+            if (hasNewCheckins) {
+              setShowBackConfirmation(true);
+            } else {
+              onBack();
+            }
+          }}
           className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
         >
           Back
         </button>
       </div>
+
+      {/* Unsaved Changes Confirmation Modal */}
+      {showBackConfirmation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              Unsaved Check-Ins
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              You have {checkedInPeople.size} unsaved check-in{checkedInPeople.size === 1 ? '' : 's'}. Are you sure you want to go back without saving?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBackConfirmation(false)}
+                className="flex-1 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 rounded-lg font-semibold hover:bg-gray-400 dark:hover:bg-gray-500"
+              >
+                Continue Checking In
+              </button>
+              <button
+                onClick={() => {
+                  setShowBackConfirmation(false);
+                  onBack();
+                }}
+                className="flex-1 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -449,35 +507,9 @@ function CheckInCard({ person, eventId, isEnabled, onCheckedIn, onUncheckedIn, a
       return;
     }
 
-    // Toggle on - check in
-    setLoading(true);
-    try {
-      const organizationId = 'default-org';
-
-      const response = await fetch('/api/checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organizationId,
-          eventId,
-          personId: person.id,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // pickupCode will only exist for youth
-        if (data.pickupCode) {
-          setPickupCode(data.pickupCode.code);
-        }
-        setIsChecked(true);
-        onCheckedIn(); // Notify parent that this person was checked in
-      }
-    } catch (err) {
-      console.error('Check-in error:', err);
-    } finally {
-      setLoading(false);
-    }
+    // Toggle on - just mark as checked locally (don't save to DB yet)
+    setIsChecked(true);
+    onCheckedIn(); // Notify parent that this person is selected for check-in
   };
 
   return (

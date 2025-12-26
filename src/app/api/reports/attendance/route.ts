@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
                 family: true,
               },
             },
+            event: true,
           },
           orderBy: {
             checkInAt: 'desc',

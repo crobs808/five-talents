@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface Person {
   id: string;
@@ -55,6 +55,9 @@ export function EditFamilyModal({
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
   const [attendanceError, setAttendanceError] = useState('');
+  const lastPersonRef = useRef<HTMLDivElement>(null);
+  const lastPersonFirstNameRef = useRef<HTMLInputElement>(null);
+  const [selectedPeopleForAttendance, setSelectedPeopleForAttendance] = useState<string[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,7 +71,17 @@ export function EditFamilyModal({
       const response = await fetch('/api/calendar/past-events');
       if (response.ok) {
         const data = await response.json();
-        setPastEvents(data.events || []);
+        // Deduplicate events by ID, keeping the first occurrence
+        const uniqueEvents = Array.from(
+          new Map((data.events || []).map((event: PastEvent) => [event.id, event])).values()
+        );
+        // Sort by date (most recent first)
+        uniqueEvents.sort((a: PastEvent, b: PastEvent) => {
+          const dateA = new Date(a.start).getTime();
+          const dateB = new Date(b.start).getTime();
+          return dateB - dateA; // Descending order (recent to oldest)
+        });
+        setPastEvents(uniqueEvents);
       }
     } catch (err) {
       console.error('Failed to fetch past events:', err);
@@ -94,20 +107,30 @@ export function EditFamilyModal({
   };
 
   const hasAttendanceChanges = selectedEvents.length > 0 && 
+    selectedPeopleForAttendance.length > 0 &&
     JSON.stringify(selectedEvents.sort()) !== JSON.stringify(initialSelectedEvents.sort());
 
   const handleSaveAttendance = async () => {
-    if (!hasAttendanceChanges) return;
+    if (!hasAttendanceChanges || selectedPeopleForAttendance.length === 0) return;
 
     try {
       setSavingAttendance(true);
       setAttendanceError('');
+      
+      // Log the request for debugging
+      console.log('Sending retroactive attendance request:', {
+        familyId,
+        eventIds: selectedEvents,
+        personIds: selectedPeopleForAttendance,
+      });
+      
       const response = await fetch('/api/attendance/retroactive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           familyId,
           eventIds: selectedEvents,
+          personIds: selectedPeopleForAttendance,
         }),
       });
 
@@ -117,10 +140,26 @@ export function EditFamilyModal({
       }
 
       const data = await response.json();
+      
+      // Log the response for debugging
+      console.log('Retroactive attendance response:', data);
+      
+      // Show feedback about what was saved
+      let message = `Successfully marked ${data.marked} attendance records for ${selectedPeopleForAttendance.length} family member(s) and ${selectedEvents.length} event(s)`;
+      if (data.failedEventIds && data.failedEventIds.length > 0) {
+        message += `.\n\nNote: ${data.failedEventIds.length} event(s) could not be found in calendar.`;
+        console.warn('Failed to find events in calendar:', data.failedEventIds);
+      }
+      
       setInitialSelectedEvents([...selectedEvents]);
-      setAttendanceError('');
+      setAttendanceError(''); // Clear any errors
+      
+      // Show success but keep the dialog open so user can see the result
+      alert(message);
     } catch (err) {
-      setAttendanceError(err instanceof Error ? err.message : 'Failed to save attendance');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save attendance';
+      console.error('Error saving attendance:', err);
+      setAttendanceError(errorMessage);
     } finally {
       setSavingAttendance(false);
     }
@@ -158,6 +197,12 @@ export function EditFamilyModal({
         },
       ],
     });
+    
+    // Scroll to the new person and focus first name input after render
+    setTimeout(() => {
+      lastPersonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      lastPersonFirstNameRef.current?.focus();
+    }, 0);
   };
 
   const removePerson = (index: number) => {
@@ -241,6 +286,7 @@ export function EditFamilyModal({
             <div className="space-y-4">
               {formData.people.map((person, index) => (
                 <div
+                  ref={index === formData.people.length - 1 ? lastPersonRef : null}
                   key={person.id}
                   className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-900"
                 >
@@ -250,6 +296,7 @@ export function EditFamilyModal({
                         First Name
                       </label>
                       <input
+                        ref={index === formData.people.length - 1 ? lastPersonFirstNameRef : null}
                         type="text"
                         value={person.firstName}
                         onChange={(e) =>
@@ -324,6 +371,45 @@ export function EditFamilyModal({
             <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
               Retroactive Attendance (Past 6 months)
             </h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Select Family Members
+              </label>
+              <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-900 max-h-32 overflow-y-auto">
+                {formData.people.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No family members to select</p>
+                ) : (
+                  <div className="space-y-2">
+                    {formData.people.map((person) => (
+                      <label key={person.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={selectedPeopleForAttendance.includes(person.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPeopleForAttendance([...selectedPeopleForAttendance, person.id]);
+                            } else {
+                              setSelectedPeopleForAttendance(selectedPeopleForAttendance.filter(id => id !== person.id));
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <span className="text-gray-700 dark:text-gray-300">
+                          {person.firstName} {person.lastName} ({person.role === 'YOUTH' ? 'Youth' : 'Adult'})
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedPeopleForAttendance.length > 0 && (
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                  {selectedPeopleForAttendance.length} member{selectedPeopleForAttendance.length !== 1 ? 's' : ''} selected
+                </p>
+              )}
+            </div>
+
             {loadingEvents ? (
               <div className="text-sm text-gray-500 dark:text-gray-400">Loading events...</div>
             ) : pastEvents.length === 0 ? (
@@ -336,8 +422,8 @@ export function EditFamilyModal({
                   </div>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 mb-3">
-                  {pastEvents.map((event) => (
-                    <label key={event.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                  {pastEvents.map((event, index) => (
+                    <label key={`${event.id}-${index}`} className="flex items-center gap-2 cursor-pointer text-sm">
                       <input
                         type="checkbox"
                         checked={selectedEvents.includes(event.id)}

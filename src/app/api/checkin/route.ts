@@ -10,7 +10,7 @@ import { generatePickupCode } from '@/lib/utils';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { organizationId, eventId, personId } = body;
+    const { organizationId, eventId, personId, eventTitle, eventLocation } = body;
 
     if (!organizationId || !eventId || !personId) {
       return createApiError('Missing required fields');
@@ -32,13 +32,24 @@ export async function POST(request: NextRequest) {
     
     if (!event) {
       // Create a placeholder event for calendar events (check-in events)
+      // Use provided title and location if available, otherwise use defaults
       event = await prisma.event.create({
         data: {
           id: eventId,
           organizationId,
-          title: 'Calendar Event',
+          title: eventTitle || 'Calendar Event',
+          location: eventLocation || undefined,
           status: 'ACTIVE',
           startsAt: new Date(),
+        },
+      });
+    } else if (eventTitle) {
+      // Always update the event with the latest calendar data when we have a real title
+      event = await prisma.event.update({
+        where: { id: eventId },
+        data: {
+          title: eventTitle,
+          location: eventLocation || event.location,
         },
       });
     }
