@@ -1,6 +1,18 @@
 # Five Talents
 
-Registration, payment, and event check-in tool for nonprofits.
+**Five Talents** is a modern, self-service event management platform designed specifically for nonprofit youth groups, community organizations, and faith-based gatherings. Named after the biblical parable of the talents, it empowers organizations to efficiently manage their events without requiring staff intervention at every touchpoint.
+
+## What is Five Talents?
+
+Five Talents streamlines the complete event lifecycle for nonprofits:
+
+- **📋 Event Registration** - Self-service family registration with integrated payment processing
+- **💳 Payment Processing** - Built-in Stripe integration for collecting event fees, donations, and registrations
+- **✅ Attendance Tracking** - Real-time check-in and check-out with a kiosk-friendly interface
+- **🔐 Secure Pickup** - Family-facing pickup code system with QR code verification to ensure youth are released to authorized adults
+- **📊 Reporting & Analytics** - Admin dashboard for viewing attendance reports, managing families, and tracking event metrics
+
+Perfect for youth group events, church gatherings, community festivals, camps, field trips, and any organization that needs to track who attended and collect payments efficiently.
 
 ## Features
 
