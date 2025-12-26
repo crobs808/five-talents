@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 const SECURITY_CODE = '808080';
@@ -23,24 +23,27 @@ export default function AdminSecurityGate({ children }: { children: React.ReactN
     setIsLoading(false);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
 
-    if (code === SECURITY_CODE) {
-      localStorage.setItem(AUTH_KEY, 'authenticated');
-      setIsAuthenticated(true);
-    } else {
-      setError('Invalid security code');
-      setCode('');
-    }
-  };
+      if (code === SECURITY_CODE) {
+        localStorage.setItem(AUTH_KEY, 'authenticated');
+        setIsAuthenticated(true);
+      } else {
+        setError('Invalid security code');
+        setCode('');
+      }
+    },
+    [code]
+  );
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem(AUTH_KEY);
     setIsAuthenticated(false);
     setCode('');
-  };
+  }, []);
 
   if (isLoading) {
     return null;

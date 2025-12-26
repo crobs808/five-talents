@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface LogEntry {
   id: string;
@@ -24,25 +24,65 @@ export default function StripeTestPage() {
     scrollToBottom();
   }, [logs]);
 
-  const addLog = (
-    type: LogEntry['type'],
-    title: string,
-    content: string,
-    status?: 'OK' | 'ERROR'
-  ) => {
-    const newLog: LogEntry = {
-      id: Math.random().toString(36),
-      type,
-      timestamp: new Date(),
-      title,
-      content,
-      status,
-    };
-    setLogs((prev) => [...prev, newLog]);
-  };
+  const addLog = useCallback(
+    (
+      type: LogEntry['type'],
+      title: string,
+      content: string,
+      status?: 'OK' | 'ERROR'
+    ) => {
+      const newLog: LogEntry = {
+        id: Math.random().toString(36),
+        type,
+        timestamp: new Date(),
+        title,
+        content,
+        status,
+      };
+      setLogs((prev) => [...prev, newLog]);
+    },
+    []
+  );
 
-  const testCreatePaymentIntent = async () => {
-    setIsLoading(true);
+  // Helper to make API calls with logging
+  const makeApiCall = useCallback(
+    async (
+      method: string,
+      endpoint: string,
+      title: string,
+      payload?: unknown
+    ) => {
+      setIsLoading(true);
+      if (payload) {
+        addLog('request', `${method} ${endpoint}`, JSON.stringify(payload, null, 2));
+      } else {
+        addLog('request', `${method} ${endpoint}`, `Fetching from ${endpoint}`);
+      }
+
+      try {
+        const response = await fetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          ...(payload && { body: JSON.stringify(payload) }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          addLog('response', title, JSON.stringify(data, null, 2), 'OK');
+        } else {
+          addLog('error', title, JSON.stringify(data, null, 2), 'ERROR');
+        }
+      } catch (error) {
+        addLog('error', title, String(error), 'ERROR');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [addLog]
+  );
+
+  const testCreatePaymentIntent = useCallback(() => {
     const payload = {
       organizationId: 'default-org',
       firstName: 'Test',
@@ -53,115 +93,22 @@ export default function StripeTestPage() {
       registrationType: 'YOUTH',
       eventId: 'test-event-123',
     };
+    makeApiCall('POST', '/api/payments/create-intent', 'Payment Intent Created', payload);
+  }, [makeApiCall]);
 
-    addLog('request', 'POST /api/payments/create-intent', JSON.stringify(payload, null, 2));
+  const testListRegistrations = useCallback(() => {
+    makeApiCall('GET', '/api/registrations', 'Registrations Retrieved');
+  }, [makeApiCall]);
 
-    try {
-      const response = await fetch('/api/payments/create-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+  const testPaymentStatus = useCallback(() => {
+    makeApiCall('GET', '/api/registrations?status=pending', 'Payment Status Check');
+  }, [makeApiCall]);
 
-      const data = await response.json();
-
-      if (response.ok) {
-        addLog('response', 'Payment Intent Created', JSON.stringify(data, null, 2), 'OK');
-      } else {
-        addLog('error', 'Payment Intent Failed', JSON.stringify(data, null, 2), 'ERROR');
-      }
-    } catch (error) {
-      addLog('error', 'Request Failed', String(error), 'ERROR');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const testListRegistrations = async () => {
-    setIsLoading(true);
-    addLog('request', 'GET /api/registrations', 'Fetching all registrations');
-
-    try {
-      const response = await fetch('/api/registrations');
-      const data = await response.json();
-
-      if (response.ok) {
-        addLog('response', 'Registrations Retrieved', JSON.stringify(data, null, 2), 'OK');
-      } else {
-        addLog('error', 'Failed to fetch registrations', JSON.stringify(data, null, 2), 'ERROR');
-      }
-    } catch (error) {
-      addLog('error', 'Request Failed', String(error), 'ERROR');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const testWebhookSignature = async () => {
-    setIsLoading(true);
-    addLog('info', 'Webhook Signature Test', 'Testing webhook signature verification...');
-
-    const testEvent = {
-      id: 'evt_test_123',
-      object: 'event',
-      type: 'payment_intent.succeeded',
-      data: {
-        object: {
-          id: 'pi_test_123',
-          amount: 5000,
-          currency: 'usd',
-          status: 'succeeded',
-          metadata: {
-            registrationId: 'test-reg',
-            organizationId: 'default-org',
-          },
-        },
-      },
-    };
-
-    const payload = JSON.stringify(testEvent);
-    const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
-
-    addLog('request', 'Webhook Signature Verification', `Event: ${testEvent.type}\nSecret: ${secret.substring(0, 20)}...`);
-
-    try {
-      // This is just a test - actual signature verification happens on the server
-      addLog('info', 'Note', 'Full webhook signature verification requires Stripe CLI to generate authentic signatures', 'OK');
-    } catch (error) {
-      addLog('error', 'Signature Test Failed', String(error), 'ERROR');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const testPaymentStatus = async () => {
-    setIsLoading(true);
-    addLog('request', 'GET /api/registrations (filter: with payments)', 'Checking payment statuses');
-
-    try {
-      const response = await fetch('/api/registrations?status=pending');
-      const data = await response.json();
-
-      if (response.ok) {
-        const pendingCount = Array.isArray(data) ? data.length : data.registrations?.length || 0;
-        addLog('response', `Payment Status Check`, `Found ${pendingCount} pending registrations\n\n${JSON.stringify(data, null, 2)}`, 'OK');
-      } else {
-        addLog('error', 'Status Check Failed', JSON.stringify(data, null, 2), 'ERROR');
-      }
-    } catch (error) {
-      addLog('error', 'Request Failed', String(error), 'ERROR');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const testDatabaseConnection = async () => {
+  const testDatabaseConnection = useCallback(async () => {
     setIsLoading(true);
     addLog('request', 'Database Health Check', 'Attempting to query registrations');
-
     try {
       const response = await fetch('/api/registrations');
-      
       if (response.ok) {
         addLog('response', 'Database Connected', 'Successfully connected to database', 'OK');
       } else {
@@ -172,42 +119,29 @@ export default function StripeTestPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [addLog]);
 
-  const testStripeKeys = async () => {
-    setIsLoading(true);
-    addLog('info', 'Stripe Keys Verification', 'Checking if Stripe keys are configured...');
+  const testStripeKeys = useCallback(() => {
+    const payload = {
+      organizationId: 'default-org',
+      firstName: 'Key',
+      lastName: 'Test',
+      email: 'keytest@example.com',
+      phoneNumber: '+15551234567',
+      amount: 100,
+      registrationType: 'ADULT',
+    };
+    makeApiCall('POST', '/api/payments/create-intent', 'Stripe Keys Valid', payload);
+  }, [makeApiCall]);
 
-    try {
-      // Just test if the app can make a request - the keys are verified server-side
-      const response = await fetch('/api/payments/create-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organizationId: 'default-org',
-          firstName: 'Key',
-          lastName: 'Test',
-          email: 'keytest@example.com',
-          phoneNumber: '+15551234567',
-          amount: 100, // Small amount
-          registrationType: 'ADULT',
-        }),
-      });
-
-      if (response.status === 401) {
-        addLog('error', 'Stripe Keys Missing', 'Stripe keys are not configured in .env.local', 'ERROR');
-      } else if (response.ok) {
-        addLog('response', 'Stripe Keys Valid', 'Stripe keys are properly configured and accessible', 'OK');
-      } else {
-        const data = await response.json();
-        addLog('response', 'Stripe Keys Test', JSON.stringify(data, null, 2), response.ok ? 'OK' : 'ERROR');
-      }
-    } catch (error) {
-      addLog('error', 'Keys Test Failed', String(error), 'ERROR');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const testWebhookSignature = useCallback(() => {
+    addLog(
+      'info',
+      'Webhook Test',
+      'Webhook signature verification is handled server-side at /api/webhooks/stripe. Use Stripe CLI to send authentic test events:\nstripe trigger payment_intent.succeeded',
+      'OK'
+    );
+  }, [addLog]);
 
   const clearLogs = () => {
     setLogs([]);
