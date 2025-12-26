@@ -149,25 +149,46 @@ async function main() {
 
   console.log('✓ Created event:', event.title);
 
-  // Create sample attendance records
-  const attendance1 = await prisma.attendance.upsert({
-    where: {
-      eventId_personId: {
-        eventId: event.id,
-        personId: youth1.id,
-      },
-    },
-    update: {},
-    create: {
-      organizationId: org.id,
-      eventId: event.id,
-      personId: youth1.id,
-      status: 'CHECKED_IN',
-      checkInAt: new Date(),
-    },
-  });
+  // Create sample attendance records with realistic times
+  const eventStartTime = event.startsAt;
+  const baseTime = new Date(eventStartTime);
+  
+  // Sample attendance data
+  const attendanceData = [
+    { personId: adult1.id, checkInOffset: -5, checkOutOffset: 120, notes: 'On time' },
+    { personId: youth1.id, checkInOffset: 2, checkOutOffset: 125, notes: '' },
+    { personId: youth2.id, checkInOffset: 0, checkOutOffset: 120, notes: '' },
+    { personId: adult2.id, checkInOffset: -10, checkOutOffset: 130, notes: 'Volunteer' },
+    { personId: youth3.id, checkInOffset: 15, checkOutOffset: null, notes: 'Still present' },
+  ];
 
-  console.log('✓ Created attendance record');
+  for (const data of attendanceData) {
+    const checkInTime = new Date(baseTime.getTime() + data.checkInOffset * 60 * 1000);
+    const checkOutTime = data.checkOutOffset 
+      ? new Date(baseTime.getTime() + data.checkOutOffset * 60 * 1000)
+      : null;
+
+    await prisma.attendance.upsert({
+      where: {
+        eventId_personId: {
+          eventId: event.id,
+          personId: data.personId,
+        },
+      },
+      update: {},
+      create: {
+        organizationId: org.id,
+        eventId: event.id,
+        personId: data.personId,
+        status: checkOutTime ? 'CHECKED_OUT' : 'CHECKED_IN',
+        checkInAt: checkInTime,
+        checkOutAt: checkOutTime,
+        notes: data.notes || null,
+      },
+    });
+  }
+
+  console.log('✓ Created 5 sample attendance records');
 
   // Create pickup code
   const pickupCode = await prisma.pickupCode.upsert({

@@ -65,11 +65,14 @@ export default function CheckInPage() {
         if (data.nextEvent) {
           setNextEvent(data.nextEvent);
           setEventStatus(data.eventStatus || 'upcoming');
-          // Use calendar event ID for check-in
-          setActiveEventId(data.nextEvent.id);
+          // Use 'default-event' for check-ins (our main event in the database)
+          // This ensures consistency across check-in sessions
+          setActiveEventId('default-event');
         }
       } catch (err) {
         console.error('Error fetching calendar event:', err);
+        // Fallback to default-event if calendar fails
+        setActiveEventId('default-event');
       }
     };
     
@@ -243,6 +246,112 @@ function HouseholdRoster({
 }) {
   const youth = household.people.filter((p) => p.role === 'YOUTH');
   const adults = household.people.filter((p) => p.role === 'ADULT');
+  const [checkedInPeople, setCheckedInPeople] = useState<Set<string>>(new Set());
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [alreadyCheckedIn, setAlreadyCheckedIn] = useState<Record<string, boolean>>({});
+  const organizationId = 'default-org';
+
+  // Load check-in status on mount
+  useEffect(() => {
+    const loadCheckinStatus = async () => {
+      try {
+        const url = `/api/checkin/status?organizationId=${organizationId}&eventId=${activeEventId}&familyId=${household.id}`;
+        console.log('Loading check-in status from:', url);
+        const response = await fetch(url);
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Check-in status response:', data);
+          // Convert checkedInStatus map to boolean record
+          const statusMap: Record<string, boolean> = {};
+          Object.keys(data.checkedInStatus).forEach((personId) => {
+            statusMap[personId] = true;
+          });
+          console.log('Status map:', statusMap);
+          setAlreadyCheckedIn(statusMap);
+        } else {
+          console.log('Status check failed:', response.status);
+        }
+      } catch (err) {
+        console.error('Error loading check-in status:', err);
+      }
+    };
+
+    loadCheckinStatus();
+  }, [household.id, activeEventId, organizationId]);
+
+  // Track checked-in people
+  const handlePersonCheckedIn = (personId: string) => {
+    const updated = new Set(checkedInPeople);
+    updated.add(personId);
+    setCheckedInPeople(updated);
+  };
+
+  // Track unchecked people
+  const handlePersonUncheckedIn = (personId: string) => {
+    const updated = new Set(checkedInPeople);
+    updated.delete(personId);
+    setCheckedInPeople(updated);
+  };
+
+  // Check if at least one person is newly checked in
+  const hasNewCheckins = checkedInPeople.size > 0;
+
+  const handleDone = () => {
+    if (hasNewCheckins) {
+      setShowSuccess(true);
+      setCountdown(4);
+    }
+  };
+
+  // Countdown effect
+  useEffect(() => {
+    if (!showSuccess) return;
+    
+    if (countdown === 0) {
+      onBack();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown(countdown - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [showSuccess, countdown, onBack]);
+
+  if (showSuccess) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="mb-6 text-7xl animate-bounce">✓</div>
+          <h2 className="text-4xl font-bold text-green-600 dark:text-green-400 mb-2">
+            Check-in Complete!
+          </h2>
+          <p className="text-xl text-gray-600 dark:text-gray-400 mb-6">
+            {checkedInPeople.size} {checkedInPeople.size === 1 ? 'person' : 'people'} recorded
+          </p>
+          <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-400 dark:border-green-600 rounded-lg p-6 mb-8">
+            <p className="text-lg text-gray-700 dark:text-gray-300">
+              Thank you! You're all set. Have a great event!
+            </p>
+          </div>
+          <div className="mb-8 text-6xl font-bold text-blue-600 dark:text-blue-400">
+            {countdown}
+          </div>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Returning to check-in screen...
+          </p>
+          <button
+            onClick={onBack}
+            className="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+          >
+            Check In Another Family
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -261,6 +370,9 @@ function HouseholdRoster({
                 person={adult} 
                 eventId={activeEventId} 
                 isEnabled={eventStatus === 'active' || eventStatus === 'starting-soon'}
+                onCheckedIn={() => handlePersonCheckedIn(adult.id)}
+                onUncheckedIn={() => handlePersonUncheckedIn(adult.id)}
+                alreadyCheckedIn={!!alreadyCheckedIn[adult.id]}
               />
             ))}
           </div>
@@ -277,34 +389,63 @@ function HouseholdRoster({
                 person={child} 
                 eventId={activeEventId} 
                 isEnabled={eventStatus === 'active' || eventStatus === 'starting-soon'}
+                onCheckedIn={() => handlePersonCheckedIn(child.id)}
+                onUncheckedIn={() => handlePersonUncheckedIn(child.id)}
+                alreadyCheckedIn={!!alreadyCheckedIn[child.id]}
               />
             ))}
           </div>
         </div>
       )}
 
-      <button
-        onClick={onBack}
-        className="w-full mt-8 py-3 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
-      >
-        Back
-      </button>
+      <div className="mt-8 space-y-3">
+        <button
+          onClick={handleDone}
+          disabled={!hasNewCheckins}
+          className={`w-full py-4 rounded-lg font-bold text-lg transition-all ${
+            hasNewCheckins
+              ? 'bg-green-600 text-white hover:bg-green-700 shadow-lg'
+              : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+          }`}
+        >
+          {hasNewCheckins ? `✓ Done - ${checkedInPeople.size} Checked In` : 'Select someone to check in'}
+        </button>
+        
+        <button
+          onClick={onBack}
+          className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600"
+        >
+          Back
+        </button>
+      </div>
     </div>
   );
 }
 
-function CheckInCard({ person, eventId, isEnabled }: { person: any; eventId: string; isEnabled: boolean }) {
-  const [isChecked, setIsChecked] = useState(false);
+function CheckInCard({ person, eventId, isEnabled, onCheckedIn, onUncheckedIn, alreadyCheckedIn = false }: { person: any; eventId: string; isEnabled: boolean; onCheckedIn: () => void; onUncheckedIn: () => void; alreadyCheckedIn?: boolean }) {
+  const [isChecked, setIsChecked] = useState(alreadyCheckedIn);
   const [loading, setLoading] = useState(false);
   const [pickupCode, setPickupCode] = useState('');
+  const [isAlreadyChecked, setIsAlreadyChecked] = useState(alreadyCheckedIn);
+
+  // Update state when alreadyCheckedIn prop changes (when status API responds)
+  useEffect(() => {
+    if (alreadyCheckedIn) {
+      setIsChecked(true);
+      setIsAlreadyChecked(true);
+    }
+  }, [alreadyCheckedIn]);
 
   const handleToggleCheckIn = async () => {
     if (!isEnabled) return;
     
     if (isChecked) {
-      // Toggle off - clear the state
-      setIsChecked(false);
-      setPickupCode('');
+      // Toggle off - clear the state (but not if they were already checked in)
+      if (!isAlreadyChecked) {
+        setIsChecked(false);
+        setPickupCode('');
+        onUncheckedIn(); // Notify parent that this person was unchecked
+      }
       return;
     }
 
@@ -330,6 +471,7 @@ function CheckInCard({ person, eventId, isEnabled }: { person: any; eventId: str
           setPickupCode(data.pickupCode.code);
         }
         setIsChecked(true);
+        onCheckedIn(); // Notify parent that this person was checked in
       }
     } catch (err) {
       console.error('Check-in error:', err);
@@ -339,30 +481,41 @@ function CheckInCard({ person, eventId, isEnabled }: { person: any; eventId: str
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg p-6">
+    <div className={`border-2 rounded-lg p-6 transition-all ${
+      isChecked
+        ? 'bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-600'
+        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
+    }`}>
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex-1">
           <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             {person.firstName} {person.lastName}
           </div>
           {pickupCode && (
-            <div className="text-lg font-mono text-green-600 mt-2">
+            <div className="text-lg font-mono text-green-600 dark:text-green-400 mt-2">
               Pickup Code: {pickupCode}
+            </div>
+          )}
+          {isChecked && !pickupCode && (
+            <div className="text-sm text-green-600 dark:text-green-400 mt-2 font-semibold">
+              ✓ Checked in {isAlreadyChecked && '(earlier)'}
             </div>
           )}
         </div>
         <button
           onClick={handleToggleCheckIn}
-          disabled={loading || !isEnabled}
+          disabled={loading || !isEnabled || isAlreadyChecked}
           className={`btn-kiosk ${
             !isEnabled 
               ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+              : isAlreadyChecked
+              ? 'bg-green-500 text-white cursor-not-allowed hover:bg-green-500'
               : isChecked 
               ? 'bg-green-600 text-white hover:bg-red-600' 
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
-          {!isEnabled ? 'No Active Event' : isChecked ? '✓ Checked In' : 'Check In'}
+          {!isEnabled ? 'No Active Event' : isAlreadyChecked ? '✓ Already Checked In' : isChecked ? '✓ Checked In' : 'Check In'}
         </button>
       </div>
     </div>
