@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { NumericKeypad } from '@/components/NumericKeypad';
 import { maskPhoneForDisplay } from '@/lib/utils';
 
@@ -76,35 +76,38 @@ export default function CheckInPage() {
     fetchNextEvent();
   }, [graceMinutes]);
 
-  const handleKeypadSubmit = async (value: string) => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch(
-        `/api/families?organizationId=${organizationId}&phoneLast4=${value}`
-      );
-      const data = await response.json();
+  const handleKeypadSubmit = useCallback(
+    async (value: string) => {
+      setLoading(true);
+      setError('');
+      try {
+        const response = await fetch(
+          `/api/families?organizationId=${organizationId}&phoneLast4=${value}`
+        );
+        const data = await response.json();
 
-      if (!response.ok) {
-        setError('Phone number not found. Please contact staff.');
-        return;
-      }
+        if (!response.ok) {
+          setError('Phone number not found. Please contact staff.');
+          return;
+        }
 
-      if (data.length === 0) {
-        setError('Phone number not found. Please contact staff.');
-      } else if (data.length === 1) {
-        setSelectedHousehold(data[0]);
-        setScreen('roster');
-      } else {
-        setHouseholds(data);
-        setScreen('households');
+        if (data.length === 0) {
+          setError('Phone number not found. Please contact staff.');
+        } else if (data.length === 1) {
+          setSelectedHousehold(data[0]);
+          setScreen('roster');
+        } else {
+          setHouseholds(data);
+          setScreen('households');
+        }
+      } catch (err) {
+        setError('Error searching families. Please try again.');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Error searching families. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [organizationId]
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-50 dark:from-gray-900 dark:to-gray-950 p-4 sm:p-8">
