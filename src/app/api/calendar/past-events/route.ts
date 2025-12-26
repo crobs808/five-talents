@@ -9,59 +9,12 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const organizationId = searchParams.get('organizationId') || 'default-org';
     
-    // Fetch calendar URLs from database
-    let calendarUrls = await prisma.calendarUrl.findMany({
-      where: {
-        organizationId,
-        isActive: true,
-      },
-    });
-
-    // If no URLs found, use default
-    if (calendarUrls.length === 0) {
-      calendarUrls = [{ url: DEFAULT_CALENDAR_URL } as any];
-    }
-
-    const urls = calendarUrls.map(c => c.url);
-    
-    // Fetch and parse events from all calendars
-    const allEvents: any[] = [];
-    for (const url of urls) {
-      try {
-        const events = await ical.async.fromURL(url);
-        for (const event of Object.values(events)) {
-          if (event.type === 'VEVENT') {
-            allEvents.push(event);
-          }
-        }
-      } catch (error) {
-        console.error(`Error fetching calendar from ${url}:`, error);
-        // Continue with other calendars
-      }
-    }
-    
     const now = new Date();
     // Get events from 6 months ago to today
     const sixMonthsAgo = new Date(now.getTime() - 6 * 30 * 24 * 60 * 60 * 1000);
     const pastEvents: any[] = [];
-    
-    // Parse calendar events and filter for past events
-    for (const event of allEvents) {
-      const startDate = new Date(event.start);
-      
-      // Include events that ended between 6 months ago and today
-      if (startDate >= sixMonthsAgo && startDate <= now) {
-        const eventData = {
-          id: event.uid,
-          title: event.summary || 'Untitled Event',
-          start: startDate.toISOString(),
-          isLocal: false, // Calendar events are synced
-        };
-        pastEvents.push(eventData);
-      }
-    }
 
-    // Also include locally created events from the Event table
+    // First, get locally created events from the Event table
     const localEvents = await prisma.event.findMany({
       where: {
         organizationId,
@@ -85,7 +38,59 @@ export async function GET(request: NextRequest) {
         isLocal: true, // Locally created events
       });
     }
-    
+
+    // Try to fetch calendar events with a timeout
+    try {
+      const calendarUrls = await prisma.calendarUrl.findMany({
+        where: {
+          organizationId,
+          isActive: true,
+        },
+      });
+
+      const urls = calendarUrls.length > 0 ? calendarUrls.map(c => c.url) : [DEFAULT_CALENDAR_URL];
+
+      // Fetch and parse events from all calendars with timeout
+      for (const url of urls) {
+        try {
+          // Set a timeout for the fetch operation
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+          const events = await Promise.race([
+            ical.async.fromURL(url),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Calendar fetch timeout')), 5000)
+            )
+          ]) as any;
+
+          clearTimeout(timeoutId);
+
+          for (const event of Object.values(events)) {
+            if ((event as any).type === 'VEVENT') {
+              const startDate = new Date((event as any).start);
+              
+              // Include events that started between 6 months ago and today
+              if (startDate >= sixMonthsAgo && startDate <= now) {
+                pastEvents.push({
+                  id: (event as any).uid,
+                  title: (event as any).summary || 'Untitled Event',
+                  start: startDate.toISOString(),
+                  isLocal: false, // Calendar events are synced
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching calendar from ${url}:`, error instanceof Error ? error.message : error);
+          // Continue with other calendars
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching calendar URLs:', error);
+      // Continue without calendar events
+    }
+
     // Sort by date descending (most recent first)
     pastEvents.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
     

@@ -23,6 +23,20 @@ export default function AdminSecurityGate({ children }: { children: React.ReactN
     setIsLoading(false);
   }, []);
 
+  const handleCodeChange = useCallback(
+    (newCode: string) => {
+      setCode(newCode);
+      setError('');
+
+      // Auto-unlock if code is correct
+      if (newCode === SECURITY_CODE) {
+        localStorage.setItem(AUTH_KEY, 'authenticated');
+        setIsAuthenticated(true);
+      }
+    },
+    []
+  );
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
@@ -66,10 +80,7 @@ export default function AdminSecurityGate({ children }: { children: React.ReactN
               <input
                 type="password"
                 value={code}
-                onChange={(e) => {
-                  setCode(e.target.value);
-                  setError('');
-                }}
+                onChange={(e) => handleCodeChange(e.target.value)}
                 placeholder="••••••"
                 maxLength={6}
                 className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-center text-2xl tracking-widest font-mono focus:outline-none focus:border-blue-500 transition-colors"
