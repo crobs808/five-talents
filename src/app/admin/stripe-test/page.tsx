@@ -60,11 +60,16 @@ export default function StripeTestPage() {
       }
 
       try {
-        const response = await fetch(endpoint, {
+        const fetchOptions: RequestInit = {
           method,
           headers: { 'Content-Type': 'application/json' },
-          ...(payload && { body: JSON.stringify(payload) }),
-        });
+        };
+        
+        if (payload) {
+          fetchOptions.body = JSON.stringify(payload);
+        }
+
+        const response = await fetch(endpoint, fetchOptions);
 
         const data = await response.json();
 

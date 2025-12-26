@@ -79,7 +79,6 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
         status: 'succeeded',
         description: `Payment received for registration ${registrationId}`,
         metadata: JSON.stringify({
-          chargeId: paymentIntent.charges.data[0]?.id,
           receiptEmail: paymentIntent.receipt_email,
         }),
       },

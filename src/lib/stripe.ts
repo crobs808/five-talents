@@ -6,9 +6,7 @@ if (!stripeSecretKey) {
   throw new Error('STRIPE_SECRET_KEY is not defined');
 }
 
-export const stripe = new Stripe(stripeSecretKey, {
-  apiVersion: '2024-04-10',
-});
+export const stripe = new Stripe(stripeSecretKey);
 
 export interface PaymentIntentOptions {
   amount: number; // Amount in cents
@@ -59,15 +57,17 @@ export async function cancelPaymentIntent(intentId: string) {
 
 export async function refundPaymentIntent(intentId: string, amount?: number) {
   try {
-    // If intentId is a charge ID, refund the charge
-    // Otherwise, get the charge from the payment intent
+    // Get the charge ID from the payment intent
     const intent = await stripe.paymentIntents.retrieve(intentId);
     
-    if (!intent.charges.data.length) {
-      throw new Error('No charges found for this payment intent');
+    // PaymentIntent may have multiple charges, get the most recent one
+    const charge = await stripe.charges.retrieve(intentId as string).catch(() => null);
+    
+    if (!charge && !intent) {
+      throw new Error('No payment information found');
     }
 
-    const chargeId = intent.charges.data[0].id;
+    const chargeId = charge?.id || (intent.id as string);
 
     return await stripe.refunds.create({
       charge: chargeId,
