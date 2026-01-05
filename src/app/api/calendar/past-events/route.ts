@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      const urls = calendarUrls.length > 0 ? calendarUrls.map(c => c.url) : [DEFAULT_CALENDAR_URL];
+      const urls = calendarUrls.length > 0 ? calendarUrls.map((c: any) => c.url) : [DEFAULT_CALENDAR_URL];
 
       // Fetch and parse events from all calendars with timeout
       for (const url of urls) {
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Sort by date descending (most recent first)
-    pastEvents.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
+    pastEvents.sort((a: any, b: any) => new Date(b.start).getTime() - new Date(a.start).getTime());
     
     return NextResponse.json({ events: pastEvents });
   } catch (error) {

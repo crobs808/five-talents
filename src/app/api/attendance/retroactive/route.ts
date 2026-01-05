@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       calendarUrls = [{ url: DEFAULT_CALENDAR_URL } as any];
     }
 
-    const urls = calendarUrls.map(c => c.url);
+    const urls = calendarUrls.map((c: any) => c.url);
 
     // Fetch calendar events from all URLs
     const eventMap = new Map<string, any>();

@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Only create pickup codes for youth
-    let pickupCode = null;
+    let pickupCode: any = null;
     if (person.role === 'YOUTH') {
       pickupCode = await prisma.pickupCode.findFirst({
         where: {
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
       data: {
         organizationId,
         action: 'CHECKIN',
-        details: JSON.stringify({ eventId, personId, pickupCodeId: pickupCode?.id }),
+        details: JSON.stringify({ eventId, personId, pickupCodeId: pickupCode && 'id' in pickupCode ? (pickupCode as any).id : null }),
       },
     });
 

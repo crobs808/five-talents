@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       calendarUrls = [{ url: DEFAULT_CALENDAR_URL } as any];
     }
 
-    const urls = calendarUrls.map(c => c.url);
+    const urls = calendarUrls.map((c: any) => c.url);
     
     // Fetch and parse events from all calendars
     const allEvents: any[] = [];

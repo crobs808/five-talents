@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const imported = [];
+    const imported: any[] = [];
 
     for (const familyData of families) {
       // Check if family already exists

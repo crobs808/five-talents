@@ -266,7 +266,7 @@ export default function ReportsPage() {
               <option value="">Select an event...</option>
               <option value="all">All Attendance (All Events)</option>
               {events.map((event) => {
-                const eventDate = event.start ? new Date(event.start).toLocaleDateString() : 'Date not available';
+                const eventDate = event.startsAt ? new Date(event.startsAt).toLocaleDateString() : 'Date not available';
                 return (
                   <option key={event.id} value={event.id}>
                     {event.title} ({eventDate})

@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
         eventId,
         organizationId,
         personId: {
-          in: family.people.map((p) => p.id),
+          in: family.people.map((p: any) => p.id),
         },
       },
       include: {
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     // Create a map of personId -> status
     const checkedInMap: Record<string, string> = {};
-    attendances.forEach((att) => {
+    attendances.forEach((att: any) => {
       checkedInMap[att.personId] = att.status;
     });
 

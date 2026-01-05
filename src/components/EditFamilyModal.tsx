@@ -74,7 +74,7 @@ export function EditFamilyModal({
         // Deduplicate events by ID, keeping the first occurrence
         const uniqueEvents = Array.from(
           new Map((data.events || []).map((event: PastEvent) => [event.id, event])).values()
-        );
+        ) as PastEvent[];
         // Sort by date (most recent first)
         uniqueEvents.sort((a: PastEvent, b: PastEvent) => {
           const dateA = new Date(a.start).getTime();
