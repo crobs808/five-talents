@@ -140,7 +140,7 @@ export default function ReportsPage() {
           {
             id: 'default-event',
             title: 'Default Event (Check-in Test)',
-            start: new Date().toISOString(),
+            startsAt: new Date().toISOString(),
           },
         ];
         setEvents(fallbackEvents);
